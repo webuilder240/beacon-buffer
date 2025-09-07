@@ -128,7 +128,6 @@ class BeaconBuffer {
   sendNow(): boolean {
     // Check if lock is enabled and already sending
     if (this.settings.enableSendLock && this.isSending) {
-      console.log('Send already in progress, skipping...')
       return false
     }
 
@@ -155,7 +154,6 @@ class BeaconBuffer {
       if (success) {
         // Remove only sent data from buffer
         this.removeSentDataFromBuffer()
-        console.log(`Buffered data sent successfully to ${this.settings.endpointUrl}`)
         this.clearSendTimeout()
         return true
       } else {
@@ -163,7 +161,6 @@ class BeaconBuffer {
         
         // Retry if configured
         if (this.settings.retryOnFailure) {
-          console.log('Retrying send...')
           // Release lock temporarily for retry
           if (this.settings.enableSendLock) {
             this.isSending = false
@@ -239,7 +236,6 @@ class BeaconBuffer {
   // Lifecycle management
   start(): void {
     if (this.isRunning) {
-      console.warn('Beacon buffer is already started')
       return
     }
 
@@ -248,12 +244,10 @@ class BeaconBuffer {
     this.sendNow()
 
     this.isRunning = true
-    console.log(`Beacon buffer started with interval: ${this.settings.sendInterval}ms`)
   }
 
   stop(): void {
     if (!this.isRunning) {
-      console.warn('Beacon buffer is not started')
       return
     }
 
@@ -261,7 +255,6 @@ class BeaconBuffer {
     this.stopPeriodicSending()
 
     this.isRunning = false
-    console.log('Beacon buffer stopped')
   }
 
   // Event management

@@ -170,7 +170,7 @@ describe('BeaconBuffer', () => {
       }
 
       const buffer = new BeaconBuffer(config)
-      expect(consoleLogStub.calledWith('Beacon buffer started with interval: 20000ms')).to.be.true
+      expect(buffer.isStarted()).to.be.true
 
       clock.restore()
     })
@@ -302,7 +302,8 @@ describe('BeaconBuffer', () => {
       // Try to send while lock is held
       const result = buffer.sendNow()
       expect(result).to.be.false
-      expect(consoleLogStub.calledWith('Send already in progress, skipping...')).to.be.true
+      // Log message removed for size optimization - verify behavior instead
+      expect(result).to.be.false
       expect(sendBeaconStub.called).to.be.false
 
       // Release lock and try again
@@ -440,7 +441,8 @@ describe('BeaconBuffer', () => {
       
       expect(result).to.be.true
       expect(sendBeaconStub.calledTwice).to.be.true
-      expect(consoleLogStub.calledWith('Retrying send...')).to.be.true
+      // Log message removed for size optimization - verify retry behavior instead
+      expect(sendBeaconStub.callCount).to.equal(2) // Original call + retry
     })
 
     it('should work without send lock when disabled', () => {
@@ -480,7 +482,8 @@ describe('BeaconBuffer', () => {
 
     it('should start automatic sending', () => {
       buffer.start()
-      expect(consoleLogStub.calledWith('Beacon buffer started with interval: 5000ms')).to.be.true
+      // Log message removed for size optimization - verify started state instead
+      expect(buffer.isStarted()).to.be.true
     })
 
     it('should send data at intervals', () => {
@@ -504,7 +507,8 @@ describe('BeaconBuffer', () => {
       buffer.addLog({ event: 'test' })
 
       buffer.stop()
-      expect(consoleLogStub.calledWith('Beacon buffer stopped')).to.be.true
+      // Log message removed for size optimization - verify stopped state instead
+      expect(buffer.isStarted()).to.be.false
 
       clock.tick(10000)
       expect(sendBeaconStub.called).to.be.false // No sends should occur after stop
@@ -515,12 +519,14 @@ describe('BeaconBuffer', () => {
       consoleWarnStub.resetHistory()
 
       buffer.start()
-      expect(consoleWarnStub.calledWith('Beacon buffer is already started')).to.be.true
+      // Log message removed for size optimization - verify no state change
+      expect(buffer.isStarted()).to.be.true
     })
 
     it('should not stop if not started', () => {
       buffer.stop()
-      expect(consoleWarnStub.calledWith('Beacon buffer is not started')).to.be.true
+      // Log message removed for size optimization - verify no state change
+      expect(buffer.isStarted()).to.be.false
     })
   })
 
