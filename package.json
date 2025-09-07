@@ -1,6 +1,6 @@
 {
   "name": "beacon-buffer",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A lightweight, configurable JavaScript library for buffering and sending data using the Beacon API",
   "main": "dist/beacon-buffer.js",
   "types": "dist/beacon-buffer.d.ts",
