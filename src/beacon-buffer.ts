@@ -14,6 +14,8 @@ export interface BeaconBufferConfig {
   enableSendLock?: boolean
   sendTimeout?: number
   retryOnFailure?: boolean
+  maxBufferSize?: number
+  enableAutoSend?: boolean
 }
 
 export interface LogData {
@@ -31,12 +33,15 @@ interface Settings {
   enableSendLock: boolean
   sendTimeout: number
   retryOnFailure: boolean
+  maxBufferSize: number
+  enableAutoSend: boolean
 }
 
 const DEFAULT_SEND_INTERVAL = 20000
 const DEFAULT_BUFFER_KEY = 'beaconBuffer'
 const DEFAULT_DATA_KEY = 'logs'
 const DEFAULT_SEND_TIMEOUT = 30000
+const DEFAULT_MAX_BUFFER_SIZE = 50 * 1024 // 50KB
 const CONTENT_TYPE_JSON = 'application/json; charset=UTF-8'
 
 class BeaconBuffer {
@@ -76,7 +81,9 @@ class BeaconBuffer {
       autoStart: config.autoStart || false,
       enableSendLock: config.enableSendLock !== false, // Default true
       sendTimeout: config.sendTimeout || DEFAULT_SEND_TIMEOUT,
-      retryOnFailure: config.retryOnFailure || false
+      retryOnFailure: config.retryOnFailure || false,
+      maxBufferSize: config.maxBufferSize || DEFAULT_MAX_BUFFER_SIZE,
+      enableAutoSend: config.enableAutoSend !== false // Default true
     }
   }
 
@@ -98,12 +105,29 @@ class BeaconBuffer {
     }
   }
 
+  private calculateCurrentBufferSize(): number {
+    const buffer = this.getBuffer()
+    if (buffer.length === 0) return 0
+    
+    const dataToSend = this.prepareDataForSending(buffer)
+    const jsonString = JSON.stringify(dataToSend)
+    return new Blob([jsonString]).size
+  }
+
   // Public buffer operations
   addLog(logData: LogData): void {
     if (!logData) return
     const buffer = this.getBuffer()
     buffer.push({ ...logData, timestamp: new Date().toISOString() })
     this.saveBuffer(buffer)
+    
+    // Check buffer size and auto-send if enabled and over threshold
+    if (this.settings.enableAutoSend && this.isRunning && !this.isSending) {
+      const currentSize = this.calculateCurrentBufferSize()
+      if (currentSize >= this.settings.maxBufferSize) {
+        this.sendNow()
+      }
+    }
   }
 
   getBuffer(): LogData[] {

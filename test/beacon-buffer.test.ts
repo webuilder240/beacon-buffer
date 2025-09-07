@@ -123,7 +123,9 @@ describe('BeaconBuffer', () => {
         autoStart: false,
         enableSendLock: true,
         sendTimeout: 30000,
-        retryOnFailure: false
+        retryOnFailure: false,
+        maxBufferSize: 51200,
+        enableAutoSend: true
       })
     })
 
@@ -137,7 +139,9 @@ describe('BeaconBuffer', () => {
         autoStart: true,
         enableSendLock: false,
         sendTimeout: 10000,
-        retryOnFailure: true
+        retryOnFailure: true,
+        maxBufferSize: 40960,
+        enableAutoSend: false
       }
 
       const buffer = new BeaconBuffer(config)
@@ -574,6 +578,110 @@ describe('BeaconBuffer', () => {
       ;(global as any).document.dispatchEvent(event)
 
       expect(sendBeaconStub.called).to.be.false
+    })
+  })
+
+  describe('Auto-Send on Buffer Size', () => {
+    let buffer: any
+
+    beforeEach(() => {
+      buffer = new BeaconBuffer({
+        endpointUrl: 'https://api.example.com/logs',
+        maxBufferSize: 1000, // Small size for testing
+        enableAutoSend: true
+      })
+      buffer.start() // Start to enable auto-send
+    })
+
+    it('should auto-send when buffer size exceeds threshold', () => {
+      // Create large log data to exceed threshold  
+      // JSON.stringify adds quotes and headers, so we need enough data
+      const largeLogData = { 
+        event: 'test',
+        data: 'x'.repeat(1500) // Large string to trigger size threshold
+      }
+
+      sendBeaconStub.resetHistory()
+      buffer.addLog(largeLogData)
+
+      // Should trigger auto-send
+      expect(sendBeaconStub.calledOnce).to.be.true
+    })
+
+    it('should not auto-send when buffer size is below threshold', () => {
+      const smallLogData = { event: 'test', value: 123 }
+
+      sendBeaconStub.resetHistory()
+      buffer.addLog(smallLogData)
+
+      // Should not trigger auto-send
+      expect(sendBeaconStub.called).to.be.false
+    })
+
+    it('should not auto-send when enableAutoSend is false', () => {
+      const noAutoSendBuffer = new BeaconBuffer({
+        endpointUrl: 'https://api.example.com/logs',
+        maxBufferSize: 1000,
+        enableAutoSend: false
+      })
+      noAutoSendBuffer.start()
+
+      const largeLogData = { 
+        event: 'test',
+        data: 'x'.repeat(800)
+      }
+
+      sendBeaconStub.resetHistory()
+      noAutoSendBuffer.addLog(largeLogData)
+
+      // Should not trigger auto-send
+      expect(sendBeaconStub.called).to.be.false
+    })
+
+    it('should not auto-send when buffer is not started', () => {
+      const stoppedBuffer = new BeaconBuffer({
+        endpointUrl: 'https://api.example.com/logs',
+        maxBufferSize: 1000,
+        enableAutoSend: true
+      })
+
+      const largeLogData = { 
+        event: 'test',
+        data: 'x'.repeat(800)
+      }
+
+      sendBeaconStub.resetHistory()
+      stoppedBuffer.addLog(largeLogData)
+
+      // Should not trigger auto-send when not started
+      expect(sendBeaconStub.called).to.be.false
+    })
+
+    it('should not auto-send when already sending', () => {
+      // Set sending state to true
+      buffer.isSending = true
+
+      const largeLogData = { 
+        event: 'test',
+        data: 'x'.repeat(800)
+      }
+
+      sendBeaconStub.resetHistory()
+      buffer.addLog(largeLogData)
+
+      // Should not trigger auto-send when already sending
+      expect(sendBeaconStub.called).to.be.false
+    })
+
+    it('should calculate buffer size correctly', () => {
+      // Test the private method through public interface
+      buffer.addLog({ event: 'test1' })
+      buffer.addLog({ event: 'test2' })
+      
+      // Call private method through object access for testing
+      const size = buffer.calculateCurrentBufferSize()
+      expect(size).to.be.a('number')
+      expect(size).to.be.greaterThan(0)
     })
   })
 })
