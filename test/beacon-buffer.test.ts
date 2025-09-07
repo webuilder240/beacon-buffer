@@ -331,7 +331,7 @@ describe('BeaconBuffer', () => {
 
       // Add new log
       buffer.addLog({ event: 'test3' })
-      
+
       // New log should be in buffer
       const bufferData = buffer.getBuffer()
       expect(bufferData).to.have.lengthOf(1)
@@ -407,25 +407,25 @@ describe('BeaconBuffer', () => {
       })
 
       timeoutBuffer.addLog({ event: 'test1' })
-      
+
       // Start a send which will set the timeout
       timeoutBuffer.sendNow()
-      
+
       // Clear the stub to prepare for timeout test
       sendBeaconStub.resetHistory()
       consoleErrorStub.resetHistory()
-      
+
       // Manually set isSending back to true to simulate stuck send
       ;(timeoutBuffer as any).isSending = true
       ;(timeoutBuffer as any).startSendTimeout()
-      
+
       // Advance time past timeout
       clock.tick(5001)
-      
+
       // Lock should be released after timeout
       expect((timeoutBuffer as any).isSending).to.be.false
       expect(consoleErrorStub.calledWith('Send timeout after 5000ms')).to.be.true
-      
+
       clock.restore()
     })
 
@@ -436,13 +436,13 @@ describe('BeaconBuffer', () => {
       })
 
       retryBuffer.addLog({ event: 'test1' })
-      
+
       // First call fails, second succeeds
       sendBeaconStub.onFirstCall().returns(false)
       sendBeaconStub.onSecondCall().returns(true)
-      
+
       const result = retryBuffer.sendNow()
-      
+
       expect(result).to.be.true
       expect(sendBeaconStub.calledTwice).to.be.true
       // Log message removed for size optimization - verify retry behavior instead
@@ -461,7 +461,7 @@ describe('BeaconBuffer', () => {
       // Both sends should succeed even if called simultaneously
       const result1 = noLockBuffer.sendNow()
       const result2 = noLockBuffer.sendNow() // Would be skipped with lock
-      
+
       expect(result1).to.be.true
       expect(result2).to.be.false // False because buffer is empty after first send
       expect(sendBeaconStub.calledOnce).to.be.true
@@ -594,9 +594,9 @@ describe('BeaconBuffer', () => {
     })
 
     it('should auto-send when buffer size exceeds threshold', () => {
-      // Create large log data to exceed threshold  
+      // Create large log data to exceed threshold
       // JSON.stringify adds quotes and headers, so we need enough data
-      const largeLogData = { 
+      const largeLogData = {
         event: 'test',
         data: 'x'.repeat(1500) // Large string to trigger size threshold
       }
@@ -626,7 +626,7 @@ describe('BeaconBuffer', () => {
       })
       noAutoSendBuffer.start()
 
-      const largeLogData = { 
+      const largeLogData = {
         event: 'test',
         data: 'x'.repeat(800)
       }
@@ -645,7 +645,7 @@ describe('BeaconBuffer', () => {
         enableAutoSend: true
       })
 
-      const largeLogData = { 
+      const largeLogData = {
         event: 'test',
         data: 'x'.repeat(800)
       }
@@ -661,7 +661,7 @@ describe('BeaconBuffer', () => {
       // Set sending state to true
       buffer.isSending = true
 
-      const largeLogData = { 
+      const largeLogData = {
         event: 'test',
         data: 'x'.repeat(800)
       }
@@ -677,7 +677,7 @@ describe('BeaconBuffer', () => {
       // Test the private method through public interface
       buffer.addLog({ event: 'test1' })
       buffer.addLog({ event: 'test2' })
-      
+
       // Call private method through object access for testing
       const size = buffer.calculateCurrentBufferSize()
       expect(size).to.be.a('number')

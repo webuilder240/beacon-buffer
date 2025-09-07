@@ -58,7 +58,7 @@ class BeaconBuffer {
     this.validateConfig(config)
     this.settings = this.buildSettings(config)
     this.initializeEventHandlers()
-    
+
     if (this.settings.autoStart) {
       this.start()
     }
@@ -108,7 +108,7 @@ class BeaconBuffer {
   private calculateCurrentBufferSize(): number {
     const buffer = this.getBuffer()
     if (buffer.length === 0) return 0
-    
+
     const dataToSend = this.prepareDataForSending(buffer)
     const jsonString = JSON.stringify(dataToSend)
     return new Blob([jsonString]).size
@@ -120,7 +120,7 @@ class BeaconBuffer {
     const buffer = this.getBuffer()
     buffer.push({ ...logData, timestamp: new Date().toISOString() })
     this.saveBuffer(buffer)
-    
+
     // Check buffer size and auto-send if enabled and over threshold
     if (this.settings.enableAutoSend && this.isRunning && !this.isSending) {
       const currentSize = this.calculateCurrentBufferSize()
@@ -165,16 +165,16 @@ class BeaconBuffer {
       this.isSending = true
       this.startSendTimeout()
     }
-    
+
     try {
       // Copy buffer for atomic sending
       this.sendingData = [...buffer]
-      
+
       const dataToSend = this.prepareDataForSending(this.sendingData)
       const blob = this.createJsonBlob(dataToSend)
 
       const success = navigator.sendBeacon(this.settings.endpointUrl, blob)
-      
+
       if (success) {
         // Remove only sent data from buffer
         this.removeSentDataFromBuffer()
@@ -182,7 +182,7 @@ class BeaconBuffer {
         return true
       } else {
         console.error('Failed to send data with sendBeacon')
-        
+
         // Retry if configured
         if (this.settings.retryOnFailure) {
           // Release lock temporarily for retry
@@ -193,7 +193,7 @@ class BeaconBuffer {
           // Retry once
           return this.sendNow()
         }
-        
+
         // Data remains in buffer on failure
         this.clearSendTimeout()
         return false
@@ -223,14 +223,14 @@ class BeaconBuffer {
 
   private removeSentDataFromBuffer(): void {
     if (!this.sendingData) return
-    
+
     const currentBuffer = this.getBuffer()
     const sentCount = this.sendingData.length
-    
+
     // Remove sent items from the beginning of the buffer
     // This preserves any new items added during sending
     const newBuffer = currentBuffer.slice(sentCount)
-    
+
     if (newBuffer.length > 0) {
       this.saveBuffer(newBuffer)
     } else {
@@ -240,7 +240,7 @@ class BeaconBuffer {
 
   private startSendTimeout(): void {
     if (!this.settings.sendTimeout) return
-    
+
     this.sendTimeoutId = setTimeout(() => {
       console.error(`Send timeout after ${this.settings.sendTimeout}ms`)
       // Force release lock
