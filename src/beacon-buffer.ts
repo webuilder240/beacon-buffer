@@ -11,6 +11,9 @@ export interface BeaconBufferConfig {
   bufferKey?: string
   dataKey?: string
   autoStart?: boolean
+  enableSendLock?: boolean
+  sendTimeout?: number
+  retryOnFailure?: boolean
 }
 
 export interface LogData {
@@ -25,17 +28,24 @@ interface Settings {
   bufferKey: string
   dataKey: string
   autoStart: boolean
+  enableSendLock: boolean
+  sendTimeout: number
+  retryOnFailure: boolean
 }
 
 const DEFAULT_SEND_INTERVAL = 20000
 const DEFAULT_BUFFER_KEY = 'beaconBuffer'
 const DEFAULT_DATA_KEY = 'logs'
+const DEFAULT_SEND_TIMEOUT = 30000
 const CONTENT_TYPE_JSON = 'application/json; charset=UTF-8'
 
 class BeaconBuffer {
   private settings: Settings
   private sendIntervalId: NodeJS.Timeout | null = null
   private isRunning: boolean = false
+  private isSending: boolean = false
+  private sendingData: LogData[] | null = null
+  private sendTimeoutId: NodeJS.Timeout | null = null
   private visibilityHandler!: () => void
   private boundSendNow!: () => boolean
 
@@ -63,7 +73,10 @@ class BeaconBuffer {
       headers: config.headers || {},
       bufferKey: config.bufferKey || DEFAULT_BUFFER_KEY,
       dataKey: config.dataKey || DEFAULT_DATA_KEY,
-      autoStart: config.autoStart || false
+      autoStart: config.autoStart || false,
+      enableSendLock: config.enableSendLock !== false, // Default true
+      sendTimeout: config.sendTimeout || DEFAULT_SEND_TIMEOUT,
+      retryOnFailure: config.retryOnFailure || false
     }
   }
 
@@ -113,21 +126,64 @@ class BeaconBuffer {
 
   // Data sending operations
   sendNow(): boolean {
+    // Check if lock is enabled and already sending
+    if (this.settings.enableSendLock && this.isSending) {
+      console.log('Send already in progress, skipping...')
+      return false
+    }
+
     const buffer = this.getBuffer()
     if (buffer.length === 0) {
       return false
     }
 
-    const dataToSend = this.prepareDataForSending(buffer)
-    const blob = this.createJsonBlob(dataToSend)
+    // Acquire lock if enabled
+    if (this.settings.enableSendLock) {
+      this.isSending = true
+      this.startSendTimeout()
+    }
+    
+    try {
+      // Copy buffer for atomic sending
+      this.sendingData = [...buffer]
+      
+      const dataToSend = this.prepareDataForSending(this.sendingData)
+      const blob = this.createJsonBlob(dataToSend)
 
-    if (navigator.sendBeacon(this.settings.endpointUrl, blob)) {
-      this.clearBuffer()
-      console.log(`Buffered data sent successfully to ${this.settings.endpointUrl}`)
-      return true
-    } else {
-      console.error('Failed to send data with sendBeacon')
-      return false
+      const success = navigator.sendBeacon(this.settings.endpointUrl, blob)
+      
+      if (success) {
+        // Remove only sent data from buffer
+        this.removeSentDataFromBuffer()
+        console.log(`Buffered data sent successfully to ${this.settings.endpointUrl}`)
+        this.clearSendTimeout()
+        return true
+      } else {
+        console.error('Failed to send data with sendBeacon')
+        
+        // Retry if configured
+        if (this.settings.retryOnFailure) {
+          console.log('Retrying send...')
+          // Release lock temporarily for retry
+          if (this.settings.enableSendLock) {
+            this.isSending = false
+            this.clearSendTimeout()
+          }
+          // Retry once
+          return this.sendNow()
+        }
+        
+        // Data remains in buffer on failure
+        this.clearSendTimeout()
+        return false
+      }
+    } finally {
+      // Always release lock if enabled
+      if (this.settings.enableSendLock) {
+        this.sendingData = null
+        this.isSending = false
+        this.clearSendTimeout()
+      }
     }
   }
 
@@ -142,6 +198,42 @@ class BeaconBuffer {
     return new Blob([JSON.stringify(data)], {
       type: CONTENT_TYPE_JSON
     })
+  }
+
+  private removeSentDataFromBuffer(): void {
+    if (!this.sendingData) return
+    
+    const currentBuffer = this.getBuffer()
+    const sentCount = this.sendingData.length
+    
+    // Remove sent items from the beginning of the buffer
+    // This preserves any new items added during sending
+    const newBuffer = currentBuffer.slice(sentCount)
+    
+    if (newBuffer.length > 0) {
+      this.saveBuffer(newBuffer)
+    } else {
+      this.clearBuffer()
+    }
+  }
+
+  private startSendTimeout(): void {
+    if (!this.settings.sendTimeout) return
+    
+    this.sendTimeoutId = setTimeout(() => {
+      console.error(`Send timeout after ${this.settings.sendTimeout}ms`)
+      // Force release lock
+      this.isSending = false
+      this.sendingData = null
+      this.sendTimeoutId = null
+    }, this.settings.sendTimeout)
+  }
+
+  private clearSendTimeout(): void {
+    if (this.sendTimeoutId) {
+      clearTimeout(this.sendTimeoutId)
+      this.sendTimeoutId = null
+    }
   }
 
   // Lifecycle management

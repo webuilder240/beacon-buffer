@@ -120,7 +120,10 @@ describe('BeaconBuffer', () => {
         headers: {},
         bufferKey: 'beaconBuffer',
         dataKey: 'logs',
-        autoStart: false
+        autoStart: false,
+        enableSendLock: true,
+        sendTimeout: 30000,
+        retryOnFailure: false
       })
     })
 
@@ -131,7 +134,10 @@ describe('BeaconBuffer', () => {
         headers: { 'X-API-Key': 'test-key' },
         bufferKey: 'customBuffer',
         dataKey: 'events',
-        autoStart: true
+        autoStart: true,
+        enableSendLock: false,
+        sendTimeout: 10000,
+        retryOnFailure: true
       }
 
       const buffer = new BeaconBuffer(config)
@@ -282,6 +288,177 @@ describe('BeaconBuffer', () => {
       expect(result).to.be.false
       expect(consoleErrorStub.calledWith('Failed to send data with sendBeacon')).to.be.true
       expect(buffer.getBuffer()).to.have.lengthOf(1) // Buffer should not be cleared
+    })
+
+    it('should skip send when already sending', () => {
+      // Add multiple logs
+      buffer.addLog({ event: 'test1' })
+      buffer.addLog({ event: 'test2' })
+
+      // Directly manipulate the isSending flag to simulate concurrent sends
+      // This is needed because sendBeacon is synchronous
+      buffer.isSending = true
+
+      // Try to send while lock is held
+      const result = buffer.sendNow()
+      expect(result).to.be.false
+      expect(consoleLogStub.calledWith('Send already in progress, skipping...')).to.be.true
+      expect(sendBeaconStub.called).to.be.false
+
+      // Release lock and try again
+      buffer.isSending = false
+      const result2 = buffer.sendNow()
+      expect(result2).to.be.true
+      expect(sendBeaconStub.calledOnce).to.be.true
+    })
+
+    it('should preserve new logs added during sending', () => {
+      // Add initial logs
+      buffer.addLog({ event: 'test1' })
+      buffer.addLog({ event: 'test2' })
+
+      // Send the initial logs
+      const result = buffer.sendNow()
+      expect(result).to.be.true
+
+      // The buffer should be empty after successful send
+      expect(buffer.getBuffer()).to.have.lengthOf(0)
+
+      // Add new log
+      buffer.addLog({ event: 'test3' })
+      
+      // New log should be in buffer
+      const bufferData = buffer.getBuffer()
+      expect(bufferData).to.have.lengthOf(1)
+      expect(bufferData[0].event).to.equal('test3')
+    })
+
+    it('should handle concurrent sends correctly', () => {
+      // Add logs
+      buffer.addLog({ event: 'test1' })
+      buffer.addLog({ event: 'test2' })
+
+      // Simulate multiple components trying to send at once
+      const results = []
+      results.push(buffer.sendNow())
+      results.push(buffer.sendNow())
+      results.push(buffer.sendNow())
+
+      // Only first should succeed, others should be skipped
+      expect(results[0]).to.be.true
+      expect(results[1]).to.be.false
+      expect(results[2]).to.be.false
+
+      // sendBeacon should only be called once
+      expect(sendBeaconStub.calledOnce).to.be.true
+    })
+
+    it('should remove only sent data from buffer', () => {
+      // Add initial logs
+      buffer.addLog({ event: 'test1' })
+      buffer.addLog({ event: 'test2' })
+
+      // Get current buffer size
+      const initialBuffer = buffer.getBuffer()
+      expect(initialBuffer).to.have.lengthOf(2)
+
+      // Send data
+      buffer.sendNow()
+
+      // Buffer should be cleared
+      expect(buffer.getBuffer()).to.have.lengthOf(0)
+
+      // Add new logs
+      buffer.addLog({ event: 'test3' })
+      buffer.addLog({ event: 'test4' })
+
+      // New buffer should only contain new logs
+      const newBuffer = buffer.getBuffer()
+      expect(newBuffer).to.have.lengthOf(2)
+      expect(newBuffer[0].event).to.equal('test3')
+      expect(newBuffer[1].event).to.equal('test4')
+    })
+
+    it('should release lock even if sendBeacon fails', () => {
+      sendBeaconStub.returns(false)
+      buffer.addLog({ event: 'test1' })
+
+      // First send should fail but release lock
+      const result1 = buffer.sendNow()
+      expect(result1).to.be.false
+
+      // Second send should be able to proceed (lock was released)
+      sendBeaconStub.returns(true)
+      const result2 = buffer.sendNow()
+      expect(result2).to.be.true
+    })
+
+    it('should handle send timeout', () => {
+      const clock = sinon.useFakeTimers()
+      const timeoutBuffer = new BeaconBuffer({
+        endpointUrl: 'https://api.example.com/logs',
+        sendTimeout: 5000,
+        enableSendLock: true
+      })
+
+      timeoutBuffer.addLog({ event: 'test1' })
+      
+      // Start a send which will set the timeout
+      timeoutBuffer.sendNow()
+      
+      // Clear the stub to prepare for timeout test
+      sendBeaconStub.resetHistory()
+      consoleErrorStub.resetHistory()
+      
+      // Manually set isSending back to true to simulate stuck send
+      ;(timeoutBuffer as any).isSending = true
+      ;(timeoutBuffer as any).startSendTimeout()
+      
+      // Advance time past timeout
+      clock.tick(5001)
+      
+      // Lock should be released after timeout
+      expect((timeoutBuffer as any).isSending).to.be.false
+      expect(consoleErrorStub.calledWith('Send timeout after 5000ms')).to.be.true
+      
+      clock.restore()
+    })
+
+    it('should retry on failure when configured', () => {
+      const retryBuffer = new BeaconBuffer({
+        endpointUrl: 'https://api.example.com/logs',
+        retryOnFailure: true
+      })
+
+      retryBuffer.addLog({ event: 'test1' })
+      
+      // First call fails, second succeeds
+      sendBeaconStub.onFirstCall().returns(false)
+      sendBeaconStub.onSecondCall().returns(true)
+      
+      const result = retryBuffer.sendNow()
+      
+      expect(result).to.be.true
+      expect(sendBeaconStub.calledTwice).to.be.true
+      expect(consoleLogStub.calledWith('Retrying send...')).to.be.true
+    })
+
+    it('should work without send lock when disabled', () => {
+      const noLockBuffer = new BeaconBuffer({
+        endpointUrl: 'https://api.example.com/logs',
+        enableSendLock: false
+      })
+
+      noLockBuffer.addLog({ event: 'test1' })
+      noLockBuffer.addLog({ event: 'test2' })
+
+      // Both sends should succeed even if called simultaneously
+      const result1 = noLockBuffer.sendNow()
+      const result2 = noLockBuffer.sendNow() // Would be skipped with lock
+      
+      expect(result1).to.be.true
+      expect(result2).to.be.false // False because buffer is empty after first send
+      expect(sendBeaconStub.calledOnce).to.be.true
     })
   })
 

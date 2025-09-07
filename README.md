@@ -23,6 +23,9 @@ Learn more: [Beacon API - MDN Web Docs](https://developer.mozilla.org/en-US/docs
 - ⏱️ Configurable send intervals
 - 🔧 Custom HTTP headers support
 - 💾 Persistent storage across page reloads
+- 🔒 Send lock mechanism to prevent concurrent sends
+- ⏳ Configurable send timeout with automatic recovery
+- 🔄 Optional automatic retry on failure
 - 🎯 Zero dependencies
 - 📦 Small footprint
 - 🎨 Clean API with flexible buffer management
@@ -74,6 +77,9 @@ Creates a new beacon buffer instance.
 | `bufferKey` | string | No | 'beaconBuffer' | LocalStorage key for storing buffered data |
 | `dataKey` | string | No | 'logs' | Key name for the data array in the request body |
 | `autoStart` | boolean | No | false | Automatically start sending after initialization |
+| `enableSendLock` | boolean | No | true | Enable send lock to prevent concurrent sends |
+| `sendTimeout` | number | No | 30000 | Timeout in milliseconds for send operations |
+| `retryOnFailure` | boolean | No | false | Automatically retry once if send fails |
 
 #### Methods
 
@@ -177,25 +183,35 @@ document.getElementById('stop-button').addEventListener('click', () => {
 });
 ```
 
-### Error Tracking
+### With Send Lock and Retry
 
 ```javascript
-import BeaconBuffer from 'beacon-buffer';
-
-const errorBuffer = new BeaconBuffer({
-  endpointUrl: 'https://errors.example.com/capture',
-  bufferKey: 'errorBuffer',
-  dataKey: 'errors',
+const buffer = new BeaconBuffer({
+  endpointUrl: 'https://api.example.com/events',
+  enableSendLock: true,     // Prevent concurrent sends (default: true)
+  sendTimeout: 15000,        // 15 second timeout
+  retryOnFailure: true,      // Retry once on failure
   autoStart: true
 });
 
-window.addEventListener('error', (event) => {
-  errorBuffer.addLog({
-    message: event.message,
-    filename: event.filename,
-    line: event.lineno,
-    column: event.colno
-  });
+// The buffer will automatically handle:
+// - Preventing multiple simultaneous sends
+// - Timing out stuck sends after 15 seconds
+// - Retrying failed sends once
+```
+
+### High-Traffic Configuration
+
+For high-traffic applications where concurrent sends might occur:
+
+```javascript
+const buffer = new BeaconBuffer({
+  endpointUrl: 'https://api.example.com/events',
+  sendInterval: 5000,        // Send frequently
+  enableSendLock: true,      // Prevent overlapping sends
+  sendTimeout: 10000,        // Quick timeout
+  retryOnFailure: false,     // Skip retries for speed
+  autoStart: true
 });
 ```
 
