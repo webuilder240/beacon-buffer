@@ -1,0 +1,59 @@
+{
+  "name": "beacon-buffer",
+  "version": "0.1.0",
+  "description": "A lightweight, configurable JavaScript library for buffering and sending data using the Beacon API",
+  "main": "dist/beacon-buffer.js",
+  "types": "dist/beacon-buffer.d.ts",
+  "type": "module",
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "mocha",
+    "test:watch": "mocha --watch",
+    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,css}\"",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "keywords": [
+    "beacon",
+    "beacon-api",
+    "buffer",
+    "analytics",
+    "logging",
+    "telemetry",
+    "singleton",
+    "typescript"
+  ],
+  "author": "Webuilder240",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/chai": "^4.3.11",
+    "@types/jsdom": "^21.1.7",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.10.5",
+    "@types/sinon": "^17.0.2",
+    "chai": "^4.3.10",
+    "jsdom": "^23.0.1",
+    "mocha": "^10.2.0",
+    "prettier": "^3.1.1",
+    "sinon": "^17.0.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/webuilder240/beacon-buffer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/webuilder240/beacon-buffer/issues"
+  },
+  "homepage": "https://github.com/webuilder240/beacon-buffer#readme"
+}
